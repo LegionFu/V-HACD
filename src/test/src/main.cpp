@@ -38,6 +38,14 @@
 using namespace VHACD;
 using namespace std;
 
+enum class Enum_ExecMode
+{
+    Normal,
+    MaxScript
+};
+
+Enum_ExecMode exec_mode = Enum_ExecMode::Normal;
+
 class MyCallback : public IVHACD::IUserCallback {
 public:
     MyCallback(void) {}
@@ -45,9 +53,12 @@ public:
     void Update(const double overallProgress, const double stageProgress, const double operationProgress,
         const char* const stage, const char* const operation)
     {
-        cout << setfill(' ') << setw(3) << (int)(overallProgress + 0.5) << "% "
-             << "[ " << stage << " " << setfill(' ') << setw(3) << (int)(stageProgress + 0.5) << "% ] "
-             << operation << " " << setfill(' ') << setw(3) << (int)(operationProgress + 0.5) << "%" << endl;
+        if (exec_mode == Enum_ExecMode::Normal)
+        {
+            cout << setfill(' ') << setw(3) << (int)(overallProgress + 0.5) << "% "
+                << "[ " << stage << " " << setfill(' ') << setw(3) << (int)(stageProgress + 0.5) << "% ] "
+                << operation << " " << setfill(' ') << setw(3) << (int)(operationProgress + 0.5) << "%" << endl;
+        }
     };
 };
 class MyLogger : public IVHACD::IUserLogger {
@@ -130,7 +141,7 @@ bool InitOCL(const unsigned int oclPlatformID, const unsigned int oclDeviceID, O
 #endif // CL_VERSION_1_1
 
 int main(int argc, char* argv[])
-{
+{    
     // --input camel.off --output camel_acd.wrl --log log.txt --resolution 1000000 --depth 20 --concavity 0.0025 --planeDownsampling 4 --convexhullDownsampling 4 --alpha 0.05 --beta 0.05 --gamma 0.00125 --pca 0 --mode 0 --maxNumVerticesPerCH 256 --minVolumePerCH 0.0001 --convexhullApproximation 1 --oclDeviceID 2
     {
         // set parameters
@@ -190,13 +201,17 @@ int main(int argc, char* argv[])
         msg << "+ Load mesh" << std::endl;
         myLogger.Log(msg.str().c_str());
 
-        cout << msg.str().c_str();
+        if (exec_mode == Enum_ExecMode::Normal)
+        {
+            cout << msg.str().c_str();
+        } 
 
         // load mesh
         vector<float> points;
         vector<int> triangles;
         string fileExtension;
         GetFileExtension(params.m_fileNameIn, fileExtension);
+
         if (fileExtension == ".OFF") {
             if (!LoadOFF(params.m_fileNameIn, points, triangles, myLogger)) {
                 return -1;
@@ -227,7 +242,42 @@ int main(int argc, char* argv[])
             (const uint32_t *)&triangles[0], (unsigned int)triangles.size() / 3, params.m_paramsVHACD);
 
 
+        vector<vector<int>> HullsPoints;
+        auto nConvexHulls = interfaceVHACD->GetNConvexHulls();
+        for (unsigned int p = 0; p < nConvexHulls; ++p) {
+            HullsPoints.push_back(vector<int>());
+        }
 
+        if (exec_mode == Enum_ExecMode::MaxScript)
+        {
+            for (int i = 0; i < (int)points.size() / 3; i++)
+            {
+                double point[3] = { 0 };
+                point[0] = points[i * 3];
+                point[1] = points[i * 3 + 1];
+                point[2] = points[i * 3 + 2];
+                double distance = 0;
+                auto iHull = interfaceVHACD->findNearestConvexHull(point, distance);
+
+                HullsPoints[iHull].push_back(i + 1);
+            }
+
+            msg.str("");
+            for (int i = 0; i < (int)HullsPoints.size(); i++)
+            {
+                msg << "#( ";
+                for (int j = 0; j < (int)HullsPoints[i].size(); j++)
+                {
+                    msg << HullsPoints[i][j];
+                    if (j < HullsPoints[i].size() - 1)
+                        msg << ",";
+                }
+                msg << ")" << endl;
+            }
+
+            cout << msg.str().c_str();
+            myLogger.Log(msg.str().c_str());
+        }
 
         if (res) {
             std::string ext;
@@ -332,7 +382,11 @@ void Usage(const Parameters& params)
     msg << "Examples:" << endl;
     msg << "       testVHACD.exe --input bunny.obj --output bunny_acd.wrl --log log.txt" << endl
         << endl;
-    cout << msg.str();
+
+    if (exec_mode == Enum_ExecMode::Normal)
+    {
+        cout << msg.str();
+    }
     if (params.m_paramsVHACD.m_logger) {
         params.m_paramsVHACD.m_logger->Log(msg.str().c_str());
     }
@@ -340,7 +394,12 @@ void Usage(const Parameters& params)
 void ParseParameters(int argc, char* argv[], Parameters& params)
 {
     for (int i = 1; i < argc; ++i) {
-        if (!strcmp(argv[i], "--input")) {
+
+        if (!strcmp(argv[i], "--maxscript_mode")) {
+            if (++i < argc)
+                exec_mode = Enum_ExecMode::MaxScript;
+        }
+        else if (!strcmp(argv[i], "--input")) {
             if (++i < argc)
                 params.m_fileNameIn = argv[i];
         }

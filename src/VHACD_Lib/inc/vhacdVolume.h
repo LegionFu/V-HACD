@@ -362,7 +362,18 @@ void Volume::Voxelize(const T* const points, const uint32_t stridePoints, const 
             i = static_cast<size_t>(p[c][0] + 0.5);
             j = static_cast<size_t>(p[c][1] + 0.5);
             k = static_cast<size_t>(p[c][2] + 0.5);
+
+            //if (j > m_dim[1] || j < 0)
+            //{
+            //    if (c == 0) {
+            //        k0 = k1 = k;
+            //    }
+            //}
+
             assert(i < m_dim[0] && i >= 0 && j < m_dim[1] && j >= 0 && k < m_dim[2] && k >= 0);
+
+            //if(i < m_dim[0] && i >= 0 && j < m_dim[1] && j >= 0 && k < m_dim[2] && k >= 0)
+                //continue;
 
             if (c == 0) {
                 i0 = i1 = i;
